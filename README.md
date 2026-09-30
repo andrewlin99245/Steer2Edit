@@ -1,5 +1,7 @@
 # Steer2Edit
 
+2026/09/24 Update: This paper has been accepted to NeurIPS 2026!
+
 This is the official repository for the paper: [**Steer2Edit: From Activation Steering to Component-Level Editing**](https://arxiv.org/abs/2602.09870). Here is our 5 min read [project website](https://lilywenglab.github.io/Steer2Edit/).
 
 ---
