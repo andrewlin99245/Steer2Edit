@@ -99,6 +99,21 @@ The paper says it uses the GSM8K training set, while `probe` above draws 200 que
 To fit a 40 GB MIG slice, change only these `LLM()` arguments: `max_model_len=min(max_pos, 16384)`, `max_num_seqs=256`,
 `gpu_memory_utilization=0.85`. They do not change the sampling settings.
 
+### Results: four corners, direction from the full probe
+
+One seed, 100 MATH-500 questions, graded with their `extract_answer` / `verify_answer`. Vanilla is 99/100 at a mean of
+4,850 tokens. Length ratio is the geometric mean of edit_re / edit per question. p values are not corrected for
+multiple comparisons.
+
+| setting | edit correct / mean length | edit_re correct / mean length | only edit_re / only edit correct (sign p) | length ratio (p) |
+|---|---|---|---|---|
+| ρ_mlp 0.80, α 0.05 | 92 / 3,107 | 98 / 3,410 | 6 / 0 (.031) | 1.136 (<.001) |
+| ρ_mlp 0.65, α 0.05 | 80 / 2,782 | 91 / 2,993 | 15 / 4 (.019) | 1.134 (.014) |
+| ρ_mlp 0.80, α 0.20 | 84 / 3,726 | 81 / 3,528 | 6 / 9 (.607) | 0.954 (.33) |
+| ρ_mlp 0.65, α 0.20 | 69 / 2,457 | 59 / 2,213 | 5 / 15 (.041) | 0.867 (.086) |
+
+At α 0.05 edit_re is more accurate and longer, like a weaker edit. At α 0.20 it is less accurate and shorter.
+
 ### Trade-off curve
 
 `curve_packs`, `curve_run` (shardable) and `curve_eval` in `run_reencode.sh` map accuracy against length at α 0.05.
