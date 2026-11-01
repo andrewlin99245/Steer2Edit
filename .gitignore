@@ -7,3 +7,5 @@
 **/plots/*
 **/plots_tradeoff/*
 **/reencode_results/*
+
+**/__pycache__/
