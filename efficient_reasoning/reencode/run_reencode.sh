@@ -17,6 +17,9 @@ case $stage in
   edit_checks) python reencode/s2e_edit_reencode.py checks ;;          # weight edit: builds the edit packs too
   edit_run)    python reencode/s2e_edit_reencode.py run --shard "$i/$SHARDS" ;;
   edit_eval)   python reencode/evaluate_edit_reencode.py ;;
+  curve_packs) python reencode/s2e_edit_reencode.py packs ;;           # trade-off curve at alpha 0.05, after edit_run
+  curve_run)   python reencode/s2e_edit_reencode.py run --plan curve --shard "$i/$SHARDS" ;;
+  curve_eval)  python reencode/evaluate_edit_reencode.py && python reencode/evaluate_edit_curve.py ;;
   all)     for s in probe extract checks run eval; do bash "$0" "$s" 0; done ;;
-  *) echo "usage: $0 {probe|extract|checks|run|eval|all|edit_checks|edit_run|edit_eval} [shard]"; exit 1 ;;
+  *) echo "usage: $0 {probe|extract|checks|run|eval|all|edit_checks|edit_run|edit_eval|curve_packs|curve_run|curve_eval} [shard]"; exit 1 ;;
 esac

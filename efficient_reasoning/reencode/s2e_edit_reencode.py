@@ -32,6 +32,10 @@ ER = S.HERE
 # rho_attn -1 (no attention edits) x rho_mlp 0.65:0.05:0.80 x alpha 0.05:0.05:0.20 (16 settings)
 CFGS = {f"r{rm:.2f}_a{a:.2f}": (-1.0, rm, a) for rm in (0.65, 0.7, 0.75, 0.8) for a in (0.05, 0.1, 0.15, 0.2)}
 RUN = ["r0.65_a0.05", "r0.65_a0.20", "r0.80_a0.05", "r0.80_a0.20"]  # the grid's four corners
+# Trade-off curve at alpha 0.05 (run --plan curve); rho 0.50, 0.55, 0.60, 1.00 are outside their grid. (arm, cfg), by cfg
+CFGS |= {f"r{rm:.2f}_a0.05": (-1.0, rm, 0.05) for rm in (0.5, 0.55, 0.6, 1.0)}
+CURVE = sorted([("edit", f"r{rm:.2f}_a0.05") for rm in (0.55, 0.6, 0.7, 0.75, 1.0)] +
+               [("edit_re", f"r{rm:.2f}_a0.05") for rm in (0.5, 0.55, 0.6, 0.7, 0.75)], key=lambda x: x[1])
 OUT = S.OUT / "edit"
 
 
@@ -147,12 +151,12 @@ def checks():
     raise SystemExit(0 if ok else 1)
 
 
-def run(cfgs, shard):
+def run(cfgs, shard, plan=None):
     si, sn = map(int, shard.split("/"))
     OUT.mkdir(parents=True, exist_ok=True)
     qs = S.math100()
-    order = [(arm, n) for n in cfgs for arm in ("edit", "edit_re")]
-    jobs = [(q["idx"], q, arm, n) for arm, n in order for q in qs][si::sn]
+    order = plan or [(arm, n) for n in cfgs for arm in ("edit", "edit_re")]
+    jobs = sorted([(q["idx"], q, arm, n) for arm, n in order for q in qs][si::sn], key=lambda j: j[3])
     uid = lambda i, arm, n: f"math100|{arm}|{i}|{n}|s{S.SEED}"
     seen = set()
     for fn in OUT.glob("math100.*.jsonl"):
@@ -192,11 +196,19 @@ def run(cfgs, shard):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["checks", "run"])
+    ap.add_argument("mode", choices=["checks", "run", "packs"])
+    ap.add_argument("--plan", choices=["curve"])
     ap.add_argument("--cfgs", nargs="+", default=RUN, choices=list(CFGS))
     ap.add_argument("--shard", default="0/1")
     a = ap.parse_args()
-    checks() if a.mode == "checks" else run(a.cfgs, a.shard)
+    if a.mode == "packs":  # only their compute_edits, for settings the checks stage did not build
+        model = S.load_model()[0]
+        for n in sorted({c for _, c in CURVE}):
+            build_pack(model, n)
+    elif a.mode == "checks":
+        checks()
+    else:
+        run(a.cfgs, a.shard, CURVE if a.plan == "curve" else None)
 
 
 if __name__ == "__main__":

@@ -85,3 +85,22 @@ Switching is a weight swap. Each edited module keeps its original and its edited
 - `checks.py`'s cache checks are shared as `reencode_checks`. `s2e_edit_reencode.py checks` also verifies the swapped
   weights against their `apply_rank1_edits_to_hf_model` run on CPU, bitwise.
 - Run: `bash reencode/run_reencode.sh edit_checks`, then `edit_run` (shardable), then `edit_eval`.
+
+### Direction from the full GSM8K train probe
+
+The paper says it uses the GSM8K training set, while `probe` above draws 200 questions. To probe all 7,473, use their
+`generate_response.py` on vLLM with `full_probe/run_part.py` and `full_probe/merge_parts.py`, then their
+`extract_directions.py`, which writes the direction file the edit stages read:
+
+1. Write the train split to `data/gsm8k_train_full.jsonl` and split it into `data/part_0.jsonl` ... `data/part_7.jsonl`.
+2. From `efficient_reasoning/`, copy the two scripts here and run `python run_part.py $i` for each part, with
+   `VLLM_WORKER_MULTIPROC_METHOD=spawn`. Then run `python merge_parts.py` and `extract_directions.py`.
+
+To fit a 40 GB MIG slice, change only these `LLM()` arguments: `max_model_len=min(max_pos, 16384)`, `max_num_seqs=256`,
+`gpu_memory_utilization=0.85`. They do not change the sampling settings.
+
+### Trade-off curve
+
+`curve_packs`, `curve_run` (shardable) and `curve_eval` in `run_reencode.sh` map accuracy against length at α 0.05.
+They add edit at ρ_mlp 0.55, 0.60, 0.70, 0.75, 1.00 and edit_re at 0.50, 0.55, 0.60, 0.70, 0.75 to the ρ 0.65 and 0.80
+runs from `edit_run`. ρ 0.50, 0.55, 0.60 and 1.00 are outside their grid.
