@@ -39,49 +39,12 @@ def bit_eq(a, b, lo, hi):
 
 
 @torch.no_grad()
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--alpha", type=float, default=max(S.ALPHAS))
-    alpha = ap.parse_args().alpha
-    model, tok, gcfg = S.load_model()
+def reencode_checks(model, tok, gcfg, steer, chk):
+    """Checks 2-4 for any `steer` object with an `on` switch (s2e_reencode.Steer, s2e_edit_reencode.EditSwap)."""
     dev = model.device
-    report, ok = [], True
-
-    def chk(name, cond, **info):
-        nonlocal ok
-        ok &= bool(cond)
-        report.append({"check": name, "pass": bool(cond), **info})
-        print(("PASS " if cond else "FAIL ") + name, json.dumps(info, default=str)[:300], flush=True)
-
     q = json.loads(open(S.PROBE).readline())
     ids = S.prompt_ids(tok, q["question"])
     x = torch.tensor([ids], device=dev)
-
-    # 1 hook
-    base = model(input_ids=x).logits
-    steer = S.Steer(model, alpha)
-    d = torch.load(S.DIRS, map_location="cpu")["post"]["direction"]
-    cap = {}
-    mods = [(f"model.layers[{i}].self_attn.o_proj", L.self_attn.o_proj) for i, L in enumerate(model.model.layers)] + \
-           [(f"model.layers[{i}].mlp.down_proj", L.mlp.down_proj) for i, L in enumerate(model.model.layers)]
-    # capture each module's input and final (post-hook) output; recompute the unhooked output from the input
-    hs = [m.register_forward_hook((lambda n: lambda mod, i, o: cap.__setitem__(n, (i[0].detach(), o.detach())))(n))
-          for n, m in mods]
-    steer.on = True
-    model(input_ids=x)
-    steer.on = False
-    worst_bit = True
-    for n, m in mods:
-        inp, out = cap[n]
-        raw = torch.nn.functional.linear(inp, m.weight, m.bias)
-        ref = raw + d[n].to(dev).type_as(raw) * alpha
-        worst_bit &= torch.equal(out, ref)
-    for h in hs:
-        h.remove()
-    off = model(input_ids=x).logits
-    chk(f"hook == Steer2Edit LinearInterventionHook (alpha {alpha}) on all {len(mods)} components, bitwise; "
-        "inactive hook leaves logits bitwise unchanged", worst_bit and torch.equal(off, base), n_components=len(mods))
-
     # 2-3 on a real generation
     nn_set, te = S.split_set(tok), tok.convert_tokens_to_ids("</think>")
     noise = lambda: Noise(f"probe|0", S.SEED, model.config.vocab_size, dev)
@@ -149,6 +112,53 @@ def main():
         # 4 determinism
         g3 = S.generate(model, steer, ids, "add_re", gcfg, nn_set, te, noise(), j + 5)
         chk("rerun gives identical tokens", g3["gen_ids"] == g2["gen_ids"])
+
+
+@torch.no_grad()
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--alpha", type=float, default=max(S.ALPHAS))
+    alpha = ap.parse_args().alpha
+    model, tok, gcfg = S.load_model()
+    dev = model.device
+    report, ok = [], True
+
+    def chk(name, cond, **info):
+        nonlocal ok
+        ok &= bool(cond)
+        report.append({"check": name, "pass": bool(cond), **info})
+        print(("PASS " if cond else "FAIL ") + name, json.dumps(info, default=str)[:300], flush=True)
+
+    q = json.loads(open(S.PROBE).readline())
+    ids = S.prompt_ids(tok, q["question"])
+    x = torch.tensor([ids], device=dev)
+
+    # 1 hook
+    base = model(input_ids=x).logits
+    steer = S.Steer(model, alpha)
+    d = torch.load(S.DIRS, map_location="cpu")["post"]["direction"]
+    cap = {}
+    mods = [(f"model.layers[{i}].self_attn.o_proj", L.self_attn.o_proj) for i, L in enumerate(model.model.layers)] + \
+           [(f"model.layers[{i}].mlp.down_proj", L.mlp.down_proj) for i, L in enumerate(model.model.layers)]
+    # capture each module's input and final (post-hook) output; recompute the unhooked output from the input
+    hs = [m.register_forward_hook((lambda n: lambda mod, i, o: cap.__setitem__(n, (i[0].detach(), o.detach())))(n))
+          for n, m in mods]
+    steer.on = True
+    model(input_ids=x)
+    steer.on = False
+    worst_bit = True
+    for n, m in mods:
+        inp, out = cap[n]
+        raw = torch.nn.functional.linear(inp, m.weight, m.bias)
+        ref = raw + d[n].to(dev).type_as(raw) * alpha
+        worst_bit &= torch.equal(out, ref)
+    for h in hs:
+        h.remove()
+    off = model(input_ids=x).logits
+    chk(f"hook == Steer2Edit LinearInterventionHook (alpha {alpha}) on all {len(mods)} components, bitwise; "
+        "inactive hook leaves logits bitwise unchanged", worst_bit and torch.equal(off, base), n_components=len(mods))
+
+    reencode_checks(model, tok, gcfg, steer, chk)
     steer.remove()
     S.OUT.mkdir(exist_ok=True)
     (S.OUT / "checks_s2e.json").write_text(json.dumps({"all_pass": ok, "alpha": alpha, "report": report},

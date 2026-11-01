@@ -14,6 +14,9 @@ case $stage in
   checks)  python reencode/checks.py ;;
   run)     python reencode/s2e_reencode.py run --arms vanilla add add_re --shard "$i/$SHARDS" ;;
   eval)    python reencode/evaluate_reencode.py ;;
+  edit_checks) python reencode/s2e_edit_reencode.py checks ;;          # weight edit: builds the edit packs too
+  edit_run)    python reencode/s2e_edit_reencode.py run --shard "$i/$SHARDS" ;;
+  edit_eval)   python reencode/evaluate_edit_reencode.py ;;
   all)     for s in probe extract checks run eval; do bash "$0" "$s" 0; done ;;
-  *) echo "usage: $0 {probe|extract|checks|run|eval|all} [shard]"; exit 1 ;;
+  *) echo "usage: $0 {probe|extract|checks|run|eval|all|edit_checks|edit_run|edit_eval} [shard]"; exit 1 ;;
 esac

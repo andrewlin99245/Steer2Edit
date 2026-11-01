@@ -63,3 +63,25 @@ Outputs go to `efficient_reasoning/reencode_results/`, which is git-ignored. Mem
 weights plus up to about 4.8 GB of KV cache at 32k tokens, so two processes fit on a 40 GB GPU.
 
 This branch starts from upstream commit `86382c2f44fdfda2bafe80faf09634e6d729562c`.
+
+## Weight edit (Steer2Edit's method) with step re-encoding
+
+The same re-encoding applied to Steer2Edit's actual method, the rank-1 weight edit, instead of the additive baseline.
+The edit is theirs, unmodified: `edit.py`'s `compute_edits` builds the factors and `evaluate.py`'s
+`apply_rank1_edits_to_hf_model` applies them. Both functions are loaded from source, so vLLM isn't needed. For
+Qwen3-4B-Thinking only `mlp.down_proj` columns are edited (ρ_attn = −1).
+
+| arm | weights | KV cache |
+|---|---|---|
+| `edit` | their edited model on every forward | kept |
+| `edit_re` | edited on every forward | each finished step is replayed with the **original** weights and its K/V replaced; the next step's `\n\n` opener stays edited until that step ends |
+
+Switching is a weight swap. Each edited module keeps its original and its edited tensors, and the switch points
+`weight.data` at one or the other. With the edit on, the forward is exactly their edited model's.
+
+- Settings: the four corners of their `edit.sh` grid, ρ_mlp ∈ {0.65, 0.80} × α ∈ {0.05, 0.20}. One corner is the
+  best setting they report (ρ_mlp 0.8, α 0.05).
+- Same 100 questions, seed and noise as above, so the `vanilla` runs are shared.
+- `checks.py`'s cache checks are shared as `reencode_checks`. `s2e_edit_reencode.py checks` also verifies the swapped
+  weights against their `apply_rank1_edits_to_hf_model` run on CPU, bitwise.
+- Run: `bash reencode/run_reencode.sh edit_checks`, then `edit_run` (shardable), then `edit_eval`.
