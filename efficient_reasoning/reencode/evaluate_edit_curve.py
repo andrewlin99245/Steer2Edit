@@ -3,8 +3,7 @@
     python reencode/evaluate_edit_curve.py     (after evaluate_edit_reencode.py; standard library only)
 Reads the graded reencode_results/edit/eval/math100.jsonl. For each arm: piecewise-linear accuracy as a function of mean
 reasoning length through its settings; gap = edit_re - edit, averaged over the overlapping length range; 95% bootstrap CI
-over questions (the same resampled questions for every setting and arm, so pairing is kept). Also prints the held-out
-pair the preset rule selects: the edit_re setting furthest above the edit line, and the edit setting nearest in length.
+over questions (the same resampled questions for every setting and arm, so pairing is kept).
 Exploratory: settings were not chosen on held-out questions and nothing is corrected for multiple comparisons.
 """
 import json
@@ -68,13 +67,6 @@ def main():
     print(f"gap edit_re - edit over lengths {lo:.0f}-{hi:.0f}: {g:+.2f} points, 95% CI "
           f"[{boots[int(.025 * len(boots))]:+.2f}, {boots[int(.975 * len(boots))]:+.2f}] "
           f"({N_BOOT} resamples, {skipped} without overlap)")
-    a, b = curve(table, "edit_re", qs), curve(table, "edit", qs)
-    inside = [(y - at(b, x), c, x) for x, y, c in a if b[0][0] <= x <= b[-1][0]]
-    if inside:
-        for d, c, x in sorted(inside, reverse=True):
-            print(f"  {c}: {d:+.1f} points above the edit line at length {x:.0f}")
-        d, c, x = max(inside)
-        print(f"held-out pair: edit_re {c} vs edit {min(b, key=lambda p: abs(p[0] - x))[2]}")
 
 
 if __name__ == "__main__":
