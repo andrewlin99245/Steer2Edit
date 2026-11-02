@@ -7,6 +7,7 @@ over questions (the same resampled questions for every setting and arm, so pairi
 Exploratory: settings were not chosen on held-out questions and nothing is corrected for multiple comparisons.
 """
 import json
+import math
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -40,6 +41,24 @@ def gap(table, qs):
     return sum(at(a, x) - at(b, x) for x in xs) / N_GRID, lo, hi
 
 
+def readout(label, table, qs):
+    g, lo, hi = gap(table, qs)
+    if g is None:
+        print(f"{label}: no overlapping length range")
+        return
+    rng, boots, skipped = random.Random(SEED), [], 0
+    for _ in range(N_BOOT):
+        v = gap(table, rng.choices(qs, k=len(qs)))[0]
+        if v is None:
+            skipped += 1
+        else:
+            boots.append(v)
+    boots.sort()
+    print(f"{label}: gap edit_re - edit over lengths {lo:.0f}-{hi:.0f}: {g:+.2f} points, 95% CI "
+          f"[{boots[int(.025 * len(boots))]:+.2f}, {boots[int(.975 * len(boots))]:+.2f}] "
+          f"({N_BOOT} resamples, {skipped} without overlap)")
+
+
 def main():
     table = {a: defaultdict(dict) for a in ARMS}
     for line in open(EVAL):
@@ -52,21 +71,21 @@ def main():
           f"{ {f'{a} {c}': len(qs_all) - len(qs) for a in ARMS for c, qs_all in table[a].items() if len(qs_all) != len(qs)} }")
     for a in ARMS:
         print(f"{a}: " + "  ".join(f"{c.split('_')[0]} {y:.0f}%/{x:.0f}" for x, y, c in curve(table, a, qs)))
-    g, lo, hi = gap(table, qs)
-    if g is None:
-        print("no overlapping length range")
-        return
-    rng, boots, skipped = random.Random(SEED), [], 0
-    for _ in range(N_BOOT):
-        v = gap(table, rng.choices(qs, k=len(qs)))[0]
-        if v is None:
-            skipped += 1
-        else:
-            boots.append(v)
-    boots.sort()
-    print(f"gap edit_re - edit over lengths {lo:.0f}-{hi:.0f}: {g:+.2f} points, 95% CI "
-          f"[{boots[int(.025 * len(boots))]:+.2f}, {boots[int(.975 * len(boots))]:+.2f}] "
-          f"({N_BOOT} resamples, {skipped} without overlap)")
+    readout("all settings", table, qs)
+    # Below each arm's shortest setting the edit collapses (longer and less accurate), so accuracy is not a function of
+    # length there. This split was chosen after seeing the data: the branch is rho >= the arm's shortest setting.
+    upper = {}
+    for a in ARMS:
+        rho0 = float(curve(table, a, qs)[0][2].split("_")[0][1:])
+        upper[a] = {c: v for c, v in table[a].items() if float(c.split("_")[0][1:]) >= rho0}
+    readout("working branch (post hoc)", upper, qs)
+    print("nearest-length pairs on the working branch (edit_re vs edit):")
+    for x, y, c in curve(upper, "edit_re", qs):
+        xe, ye, ce = min(curve(upper, "edit", qs), key=lambda p: abs(p[0] - x))
+        A, B = upper["edit_re"][c], upper["edit"][ce]
+        w, l = sum(A[q][0] and not B[q][0] for q in qs), sum(B[q][0] and not A[q][0] for q in qs)
+        ratio = math.exp(sum(math.log(max(A[q][1], 1) / max(B[q][1], 1)) for q in qs) / len(qs))
+        print(f"  {c.split('_')[0]} {y:.0f}%/{x:.0f} vs {ce.split('_')[0]} {ye:.0f}%/{xe:.0f}: only {w}/{l}, geo length ratio {ratio:.3f}")
 
 
 if __name__ == "__main__":

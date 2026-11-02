@@ -119,3 +119,21 @@ At α 0.05 edit_re is more accurate and longer, like a weaker edit. At α 0.20 i
 `curve_packs`, `curve_run` (shardable) and `curve_eval` in `run_reencode.sh` map accuracy against length at α 0.05.
 They add edit at ρ_mlp 0.55, 0.60, 0.70, 0.75, 1.00 and edit_re at 0.50, 0.55, 0.60, 0.70, 0.75 to the ρ 0.65 and 0.80
 runs from `edit_run`. ρ 0.50, 0.55, 0.60 and 1.00 are outside their grid.
+
+Results at α 0.05 (one seed, the same 100 questions, vanilla 99/100 at 4,850 tokens):
+
+| ρ_mlp | edit correct / mean length | edit_re correct / mean length | only edit_re / only edit correct (sign p) |
+|---|---|---|---|
+| 0.50 | not run | 57 / 4,603 | |
+| 0.55 | 34 / 3,384 | 83 / 3,670 | 49 / 0 (<.001) |
+| 0.60 | 67 / 3,028 | 91 / 3,349 | 26 / 2 (<.001) |
+| 0.65 | 80 / 2,782 | 91 / 2,993 | 15 / 4 (.019) |
+| 0.70 | 89 / 2,973 | 92 / 3,069 | 5 / 2 (.453) |
+| 0.75 | 91 / 2,918 | 92 / 3,504 | 2 / 1 (1.00) |
+| 0.80 | 92 / 3,107 | 98 / 3,410 | 6 / 0 (.031) |
+| 1.00 | 96 / 3,439 | not run | |
+
+Below ρ_mlp 0.65 the edit collapses: answers get longer and less accurate. edit_re stays far more accurate there. From
+ρ_mlp 0.65 up, the average gap over the shared length range (2,993 to 3,439 tokens) is +1.36 points, 95% CI
+[-3.42, +8.32], so a better accuracy-length trade-off is not shown. That range was chosen after seeing the data.
+Standard errors of mean length are 300 to 500 tokens.
