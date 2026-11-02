@@ -43,6 +43,7 @@ The default sweep is α ∈ {0.1, 0.3, 0.5, 0.8, 1.2}, seed 64, and a budget of 
   - paired `add_re` vs `add` at each α: sign test on discordant correctness, mean length difference, and
     geometric-mean length ratio with sign-flip permutation p;
   - the baseline check (`add` length relative to `vanilla`).
+- `evaluate_edit_aime.py`, `aime_order.json`: grading and the frozen problem order for the AIME curve below.
 - `run_reencode.sh`: runs the stages `probe → extract → checks → run → eval`, each resumable and shardable.
 
 ## Usage
@@ -137,3 +138,41 @@ Below ρ_mlp 0.65 the edit collapses: answers get longer and less accurate. edit
 ρ_mlp 0.65 up, the average gap over the shared length range (2,993 to 3,439 tokens) is +1.36 points, 95% CI
 [-3.42, +8.32], so a better accuracy-length trade-off is not shown. That range was chosen after seeing the data.
 Standard errors of mean length are 300 to 500 tokens.
+
+### AIME curve
+
+`curve_packs` (after `edit_checks`), then `aime_run` (shardable) and `aime_eval` in `run_reencode.sh` run the same edit on
+harder problems. This is a separate curve and is not pooled with MATH.
+
+- Problems: the first 60 of AIME 2022-2024 in the frozen random order of `aime_order.json`. The problem file is not in this
+  repo. Set `AIME_FILE` to a JSONL with `idx` (row of `AI-MO/aimo-validation-aime`, revision 13f9e12), `question` and `gt`
+  (the answer as a plain integer, with zero padding and a trailing `^\circ` removed). That dataset has since been renamed
+  on the Hub, so look up its current name.
+- Settings: α 0.05, one seed, cap 32,768 tokens, 60 runs per setting. edit_re ρ 0.65 has 58 runs: the run was stopped early.
+- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` is recommended. Three of the 16 shards on 40 GB MIG slices at 2
+  processes per slice ran out of memory. The likely cause is allocator fragmentation, but it was not confirmed.
+
+| setting | correct / 60 | average length | cap hits | correct vs vanilla, only this / only vanilla (sign p) | length difference from vanilla (p) |
+|---|---|---|---|---|---|
+| vanilla | 45 | 20,450 | 10 | | |
+| edit ρ 1.00 | 40 | 18,557 | 11 | 3 / 8 (.227) | -1,892 (.069) |
+| edit_re ρ 1.00 | 42 | 18,987 | 10 | 3 / 6 (.508) | -1,463 (.065) |
+| edit ρ 0.80 | 30 | 18,124 | 7 | 2 / 17 (.001) | -2,326 (.022) |
+| edit_re ρ 0.80 | 34 | 17,854 | 8 | 2 / 13 (.007) | -2,596 (.014) |
+| edit ρ 0.70 | 18 | 14,008 | 2 | 2 / 29 (<.001) | -6,442 (<.001) |
+| edit_re ρ 0.65 | 20 of 58 | 15,928 | 4 | 1 / 25 (<.001; 44 of 58 for vanilla) | -4,436 (.001) |
+
+edit_re vs edit on the same questions:
+
+| pair | correct | only edit_re / only edit (sign p) | length difference (p) |
+|---|---|---|---|
+| edit_re ρ 1.00 vs edit ρ 1.00 | 42 vs 40 | 4 / 2 (.688) | +429 (.593) |
+| edit_re ρ 0.80 vs edit ρ 0.80 | 34 vs 30 | 9 / 5 (.424) | -270 (.755) |
+| edit_re ρ 0.80 vs edit ρ 1.00 | 34 vs 40 | 2 / 8 (.109) | -704 (.426) |
+| edit_re ρ 0.65 vs edit ρ 0.70 | 20 vs 17 (58 questions) | 8 / 5 (.581) | +1,901 (.066) |
+
+Lowering ρ costs far more accuracy here than on MATH, so the MATH working range does not carry over. The edit shortens
+answers by about 7 to 9% at ρ 1.00, with accuracy not clearly below vanilla. No difference between edit and edit_re is
+shown, but 60 questions can only detect gaps of about 20 points. Cap hits truncate lengths, so length differences are
+uncertain. These results are exploratory: one seed, p values uncorrected, and vanilla and edit_re ρ 1.00 were added after
+partial results were seen. AIME answers may be in the model's training data.

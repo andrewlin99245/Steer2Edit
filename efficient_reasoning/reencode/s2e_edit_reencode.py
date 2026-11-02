@@ -2,6 +2,7 @@
 
     python reencode/s2e_edit_reencode.py checks          -> reencode_results/checks_s2e_edit.json (exits non-zero on failure)
     python reencode/s2e_edit_reencode.py run [--cfgs ...] [--shard i/n]
+    python reencode/s2e_edit_reencode.py run --aime FILE [--n 60] [--shard i/n]    AIME 2022-2024 (see aime)
 
 The edit is theirs, unmodified: edit.py's compute_edits (rank-1 factors from the extract_directions.py directions) applied with
 evaluate.py's apply_rank1_edits_to_hf_model. Qwen3-4B-Thinking's settings edit only mlp.down_proj columns
@@ -20,6 +21,7 @@ import ast
 import json
 import os
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
@@ -36,6 +38,9 @@ RUN = ["r0.65_a0.05", "r0.65_a0.20", "r0.80_a0.05", "r0.80_a0.20"]  # the grid's
 CFGS |= {f"r{rm:.2f}_a0.05": (-1.0, rm, 0.05) for rm in (0.5, 0.55, 0.6, 1.0)}
 CURVE = sorted([("edit", f"r{rm:.2f}_a0.05") for rm in (0.55, 0.6, 0.7, 0.75, 1.0)] +
                [("edit_re", f"r{rm:.2f}_a0.05") for rm in (0.5, 0.55, 0.6, 0.7, 0.75)], key=lambda x: x[1])
+# AIME settings, including vanilla (the original weights, same noise keys); run question by question
+AIME = [("edit_re", "r0.65_a0.05"), ("edit", "r0.70_a0.05"), ("edit", "r0.80_a0.05"), ("edit_re", "r0.80_a0.05"),
+        ("edit", "r1.00_a0.05"), ("edit_re", "r1.00_a0.05"), ("vanilla", "vanilla")]
 OUT = S.OUT / "edit"
 
 
@@ -151,15 +156,27 @@ def checks():
     raise SystemExit(0 if ok else 1)
 
 
-def run(cfgs, shard, plan=None):
+def aime(path, n):
+    """The first n of AIME 2022-2024 in the frozen order of reencode/aime_order.json. path is a JSONL you build (not in this
+    repo) with idx (row of AI-MO/aimo-validation-aime), question and gt (the answer as a plain integer); see README."""
+    by = {r["idx"]: r for r in map(json.loads, open(path))}
+    order = json.load(open(Path(__file__).resolve().parent / "aime_order.json"))["order"]
+    return [{"idx": i, "question": by[i]["question"], "gold": by[i]["gt"]} for i in order[:n]]
+
+
+def run(cfgs, shard, plan=None, aime_file=None, aime_n=60):
     si, sn = map(int, shard.split("/"))
     OUT.mkdir(parents=True, exist_ok=True)
-    qs = S.math100()
+    qs = aime(aime_file, aime_n) if aime_file else S.math100()
+    name = "aime" if aime_file else "math100"
     order = plan or [(arm, n) for n in cfgs for arm in ("edit", "edit_re")]
-    jobs = sorted([(q["idx"], q, arm, n) for arm, n in order for q in qs][si::sn], key=lambda j: j[3])
-    uid = lambda i, arm, n: f"math100|{arm}|{i}|{n}|s{S.SEED}"
+    if aime_file:  # every setting of a question before the next question, so stopping early keeps results paired
+        jobs = [(q["idx"], q, arm, n) for q in qs for arm, n in order][si::sn]
+    else:
+        jobs = sorted([(q["idx"], q, arm, n) for arm, n in order for q in qs][si::sn], key=lambda j: j[3])
+    uid = lambda i, arm, n: f"{name}|{arm}|{i}|{n}|s{S.SEED}"
     seen = set()
-    for fn in OUT.glob("math100.*.jsonl"):
+    for fn in OUT.glob(f"{name}.*.jsonl"):
         seen |= {json.loads(l)["uid"] for l in open(fn)}
     jobs = [j for j in jobs if uid(j[0], j[2], j[3]) not in seen]
     print(f"{len(jobs)} generations", flush=True)
@@ -168,17 +185,19 @@ def run(cfgs, shard, plan=None):
     model, tok, gcfg = S.load_model()
     max_new = min(32768, model.config.max_position_embeddings - 512)
     nn_set, think_end = S.split_set(tok), tok.convert_tokens_to_ids("</think>")
-    path = OUT / f"math100.s{si}of{sn}.{int(time.time())}.jsonl"
+    path = OUT / f"{name}.s{si}of{sn}.{int(time.time())}.jsonl"
     sw, cur = None, None
     with open(path, "a") as f:
         for i, q, arm, n in jobs:
-            if n != cur:  # jobs are ordered by cfg, so this happens once per cfg; remove() leaves the originals in place
+            if n != cur:  # remove() leaves the originals in place
                 if sw is not None:
                     sw.remove()
-                sw, cur = EditSwap(model, torch.load(pack_path(n), map_location="cpu")), n
+                sw = SimpleNamespace(on=False, remove=lambda: None) if n == "vanilla" else \
+                    EditSwap(model, torch.load(pack_path(n), map_location="cpu"))
+                cur = n
             ids = S.prompt_ids(tok, q["question"])
-            g = S.generate(model, sw, ids, {"edit": "add", "edit_re": "add_re"}[arm], gcfg, nn_set, think_end,
-                           Noise(f"math100|{i}", S.SEED, model.config.vocab_size, model.device), max_new)
+            g = S.generate(model, sw, ids, {"edit": "add", "edit_re": "add_re", "vanilla": "vanilla"}[arm], gcfg, nn_set, think_end,
+                           Noise(f"{name}|{i}", S.SEED, model.config.vocab_size, model.device), max_new)
             body = g["gen_ids"][:-1] if g["hit_eos"] else g["gen_ids"]
             text = tok.decode(body, skip_special_tokens=True).strip()
             rec = {"uid": uid(i, arm, n), "idx": i, "arm": arm, "cfg": n, "seed": S.SEED,
@@ -198,6 +217,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["checks", "run", "packs"])
     ap.add_argument("--plan", choices=["curve"])
+    ap.add_argument("--aime", metavar="FILE")
+    ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--cfgs", nargs="+", default=RUN, choices=list(CFGS))
     ap.add_argument("--shard", default="0/1")
     a = ap.parse_args()
@@ -208,7 +229,7 @@ def main():
     elif a.mode == "checks":
         checks()
     else:
-        run(a.cfgs, a.shard, CURVE if a.plan == "curve" else None)
+        run(a.cfgs, a.shard, AIME if a.aime else CURVE if a.plan == "curve" else None, a.aime, a.n)
 
 
 if __name__ == "__main__":
