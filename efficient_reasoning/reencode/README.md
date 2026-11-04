@@ -187,6 +187,19 @@ under the edit on the first 30 GSM8K probes, at ρ_mlp 0.80, α 0.05.
 ```bash
 bash reencode/run_reencode.sh ent_checks   # after edit_checks: builds the threshold, then checks
 bash reencode/run_reencode.sh ent_run      # 100 MATH-500 questions; grade with edit_eval
+bash reencode/run_reencode.sh ent_aime_checks   # after curve_packs: threshold and checks at ρ_mlp 1.00
+AIME_FILE=... bash reencode/run_reencode.sh ent_aime_run   # 60 AIME problems at ρ_mlp 1.00; grade with aime_eval
 ```
 
-The checks require threshold -inf to equal `edit` and +inf to equal `edit_re`, in tokens and cache, bitwise. No results yet.
+The checks require threshold -inf to equal `edit` and +inf to equal `edit_re`, in tokens and cache, bitwise.
+
+One seed, exploratory, Qwen3-4B, ρ_mlp 0.80, α 0.05, on 100 MATH-500 questions:
+
+| Arm | Correct | Mean tokens | Cap hits |
+|---|---:|---:|---:|
+| `edit` | 92 | 3,107 | |
+| `edit_ent` | 97 | 3,215 | 0 |
+| `edit_re` | 98 | 3,410 | |
+| vanilla | 99 | 4,850 | |
+
+These settings and questions had already been seen, so this is a flag and not a result. No AIME result yet.

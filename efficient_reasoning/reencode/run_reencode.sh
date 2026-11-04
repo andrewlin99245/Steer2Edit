@@ -19,11 +19,13 @@ case $stage in
   edit_eval)   python reencode/evaluate_edit_reencode.py ;;
   ent_checks)  python reencode/s2e_edit_reencode.py ent-checks ;;      # entropy-gated state: tau + checks, after edit_checks
   ent_run)     python reencode/s2e_edit_reencode.py run --plan ent --shard "$i/$SHARDS" ;;
+  ent_aime_checks) python reencode/s2e_edit_reencode.py ent-checks --ent-cfg r1.00_a0.05 ;;  # after curve_packs
+  ent_aime_run)    python reencode/s2e_edit_reencode.py run --plan ent_aime --aime "${AIME_FILE:?AIME_FILE}" --n "${AIME_N:-60}" --shard "$i/$SHARDS" ;;
   curve_packs) python reencode/s2e_edit_reencode.py packs ;;           # trade-off curve at alpha 0.05, after edit_run
   curve_run)   python reencode/s2e_edit_reencode.py run --plan curve --shard "$i/$SHARDS" ;;
   curve_eval)  python reencode/evaluate_edit_reencode.py && python reencode/evaluate_edit_curve.py ;;
   aime_run)    python reencode/s2e_edit_reencode.py run --aime "${AIME_FILE:?AIME_FILE}" --n "${AIME_N:-60}" --shard "$i/$SHARDS" ;;  # after curve_packs
   aime_eval)   python reencode/evaluate_edit_aime.py ;;
   all)     for s in probe extract checks run eval; do bash "$0" "$s" 0; done ;;
-  *) echo "usage: $0 {probe|extract|checks|run|eval|all|edit_checks|edit_run|edit_eval|curve_packs|curve_run|curve_eval|aime_run|aime_eval} [shard]"; exit 1 ;;
+  *) echo "usage: $0 {probe|extract|checks|run|eval|all|edit_checks|edit_run|edit_eval|ent_aime_checks|ent_aime_run|curve_packs|curve_run|curve_eval|aime_run|aime_eval} [shard]"; exit 1 ;;
 esac

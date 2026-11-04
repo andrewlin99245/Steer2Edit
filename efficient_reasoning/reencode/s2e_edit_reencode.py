@@ -50,6 +50,8 @@ AIME = [("edit_re", "r0.65_a0.05"), ("edit", "r0.70_a0.05"), ("edit", "r0.80_a0.
 # Entropy-gated state: tau = the ENT_KEEP top quantile of token entropy under the edit, on the first ENT_N GSM8K probes
 ENT_CFG, ENT_KEEP, ENT_N, ENT_MAX_NEW = "r0.80_a0.05", 0.20, 30, 4096
 ENT = [("edit_ent", ENT_CFG)]
+ENT_AIME_CFG = "r1.00_a0.05"  # edit_ent on AIME, its own tau
+ENT_AIME = [("edit_ent", ENT_AIME_CFG)]
 OUT = S.OUT / "edit"
 
 
@@ -238,13 +240,13 @@ def generate_ent(model, sw, prompt_ids, tau, gcfg, nn_set, think_end, noise, max
     return res
 
 
-def tau_path():
-    return S.OUT / f"edit_ent_tau_{ENT_CFG}.json"
+def tau_path(cfg=ENT_CFG):
+    return S.OUT / f"edit_ent_tau_{cfg}.json"
 
 
-def calibrate(model, tok, gcfg, sw, nn_set, think_end):
+def calibrate(model, tok, gcfg, sw, nn_set, think_end, cfg=ENT_CFG):
     """tau from the first ENT_N GSM8K probes under the edit; not from the test questions. Reused if already built."""
-    p = tau_path()
+    p = tau_path(cfg)
     if p.exists():
         return json.loads(p.read_text())
     hs, lens = [], []
@@ -257,7 +259,7 @@ def calibrate(model, tok, gcfg, sw, nn_set, think_end):
         hs += g["ent"]
         lens.append(g["n_gen"])
     t = torch.tensor(hs)
-    d = {"tau": float(t.quantile(1 - ENT_KEEP)), "keep": ENT_KEEP, "n_questions": ENT_N, "n_tokens": len(hs), "cfg": ENT_CFG,
+    d = {"tau": float(t.quantile(1 - ENT_KEEP)), "keep": ENT_KEEP, "n_questions": ENT_N, "n_tokens": len(hs), "cfg": cfg,
          "mean_len": sum(lens) / len(lens), "quantiles": {str(q): float(t.quantile(q)) for q in (.1, .25, .5, .75, .9, .95)}}
     S.OUT.mkdir(exist_ok=True)
     p.write_text(json.dumps(d, indent=1))
@@ -265,7 +267,7 @@ def calibrate(model, tok, gcfg, sw, nn_set, think_end):
 
 
 @torch.no_grad()
-def ent_checks():
+def ent_checks(cfg=ENT_CFG):
     from checks import bit_eq, rel_err
     model, tok, gcfg = S.load_model()
     dev = model.device
@@ -277,13 +279,13 @@ def ent_checks():
         report.append({"check": name, "pass": bool(cond), **info})
         print(("PASS " if cond else "FAIL ") + name, json.dumps(info, default=str)[:300], flush=True)
 
-    sw = EditSwap(model, torch.load(pack_path(ENT_CFG), map_location="cpu"))
+    sw = EditSwap(model, torch.load(pack_path(cfg), map_location="cpu"))
     nn_set, te = S.split_set(tok), tok.convert_tokens_to_ids("</think>")
     v = model.config.vocab_size
     flat, peak = token_entropy(torch.zeros(1024), 1.0), torch.zeros(1024)
     peak[3] = 100.0
     chk("entropy: uniform over 1024 == 10 bits, a point mass ~= 0", abs(flat - 10) < 1e-3 and token_entropy(peak, 1.0) < 1e-3)
-    cal = calibrate(model, tok, gcfg, sw, nn_set, te)
+    cal = calibrate(model, tok, gcfg, sw, nn_set, te, cfg)
     tau = cal["tau"]
     chk(f"tau from {ENT_N} GSM8K probes under the edit, keeping the top {ENT_KEEP:.0%}", tau > 0, **cal)
     q = json.loads(open(S.PROBE).readline())
@@ -350,7 +352,7 @@ def ent_checks():
         chk("peak GPU memory reported", True, peak_mem_gb=g["peak_mem_gb"])
     sw.remove()
     S.OUT.mkdir(exist_ok=True)
-    (S.OUT / "checks_s2e_edit_ent.json").write_text(json.dumps({"all_pass": ok, "cfg": ENT_CFG, "report": report}, indent=1, default=str))
+    (S.OUT / f"checks_s2e_edit_ent{'' if cfg == ENT_CFG else '_' + cfg}.json").write_text(json.dumps({"all_pass": ok, "cfg": cfg, "report": report}, indent=1, default=str))
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     raise SystemExit(0 if ok else 1)
 
@@ -397,7 +399,7 @@ def run(cfgs, shard, plan=None, aime_file=None, aime_n=60):
             ids = S.prompt_ids(tok, q["question"])
             noise = Noise(f"{name}|{i}", S.SEED, model.config.vocab_size, model.device)
             if arm == "edit_ent":
-                g = generate_ent(model, sw, ids, json.loads(tau_path().read_text())["tau"], gcfg, nn_set, think_end, noise, max_new)
+                g = generate_ent(model, sw, ids, json.loads(tau_path(n).read_text())["tau"], gcfg, nn_set, think_end, noise, max_new)
             else:
                 g = S.generate(model, sw, ids, {"edit": "add", "edit_re": "add_re", "vanilla": "vanilla"}[arm], gcfg, nn_set,
                                think_end, noise, max_new)
@@ -420,11 +422,12 @@ def run(cfgs, shard, plan=None, aime_file=None, aime_n=60):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["checks", "run", "packs", "ent-checks"])
-    ap.add_argument("--plan", choices=["curve", "ent"])
+    ap.add_argument("--plan", choices=["curve", "ent", "ent_aime"])
     ap.add_argument("--aime", metavar="FILE")
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--cfgs", nargs="+", default=RUN, choices=list(CFGS))
     ap.add_argument("--shard", default="0/1")
+    ap.add_argument("--ent-cfg", default=ENT_CFG, choices=list(CFGS))  # ent-checks: the setting to calibrate and check
     a = ap.parse_args()
     if a.mode == "packs":  # only their compute_edits, for settings the checks stage did not build
         model = S.load_model()[0]
@@ -433,9 +436,9 @@ def main():
     elif a.mode == "checks":
         checks()
     elif a.mode == "ent-checks":
-        ent_checks()
+        ent_checks(a.ent_cfg)
     else:
-        run(a.cfgs, a.shard, AIME if a.aime else CURVE if a.plan == "curve" else ENT if a.plan == "ent" else None, a.aime, a.n)
+        run(a.cfgs, a.shard, ENT_AIME if a.plan == "ent_aime" else AIME if a.aime else CURVE if a.plan == "curve" else ENT if a.plan == "ent" else None, a.aime, a.n)
 
 
 if __name__ == "__main__":
