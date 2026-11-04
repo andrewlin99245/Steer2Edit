@@ -176,3 +176,17 @@ answers by about 7 to 9% at ρ 1.00, with accuracy not clearly below vanilla. No
 shown, but 60 questions can only detect gaps of about 20 points. Cap hits truncate lengths, so length differences are
 uncertain. These results are exploratory: one seed, p values uncorrected, and vanilla and edit_re ρ 1.00 were added after
 partial results were seen. AIME answers may be in the model's training data.
+
+## Entropy-gated state (edit_ent)
+
+A variation on `edit_re` that controls which edited state stays in the cache. Every forward stays edited and the prompt stays
+edited. At each step end a token's K/V are replaced by the clean ones only if the token was sampled with entropy below a
+threshold; uncertain tokens keep their edited K/V for the rest of the run. The threshold is the top 20% quantile of token entropy
+under the edit on the first 30 GSM8K probes, at ρ_mlp 0.80, α 0.05.
+
+```bash
+bash reencode/run_reencode.sh ent_checks   # after edit_checks: builds the threshold, then checks
+bash reencode/run_reencode.sh ent_run      # 100 MATH-500 questions; grade with edit_eval
+```
+
+The checks require threshold -inf to equal `edit` and +inf to equal `edit_re`, in tokens and cache, bitwise. No results yet.

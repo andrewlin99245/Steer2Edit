@@ -17,6 +17,8 @@ case $stage in
   edit_checks) python reencode/s2e_edit_reencode.py checks ;;          # weight edit: builds the edit packs too
   edit_run)    python reencode/s2e_edit_reencode.py run --shard "$i/$SHARDS" ;;
   edit_eval)   python reencode/evaluate_edit_reencode.py ;;
+  ent_checks)  python reencode/s2e_edit_reencode.py ent-checks ;;      # entropy-gated state: tau + checks, after edit_checks
+  ent_run)     python reencode/s2e_edit_reencode.py run --plan ent --shard "$i/$SHARDS" ;;
   curve_packs) python reencode/s2e_edit_reencode.py packs ;;           # trade-off curve at alpha 0.05, after edit_run
   curve_run)   python reencode/s2e_edit_reencode.py run --plan curve --shard "$i/$SHARDS" ;;
   curve_eval)  python reencode/evaluate_edit_reencode.py && python reencode/evaluate_edit_curve.py ;;

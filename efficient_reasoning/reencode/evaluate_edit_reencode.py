@@ -44,7 +44,7 @@ def main():
           f"{sum(v[1] for v in van.values()) / max(1, len(van)):.0f} caps {sum(not v[2] for v in van.values())}")
     for cfg in sorted({c for arm, c, _ in G if arm != "vanilla"}):
         print(f"\n== {cfg}")
-        for arm in ("edit", "edit_re"):
+        for arm in ("edit", "edit_re", "edit_ent"):
             v = {i: x for (a, c, i), x in G.items() if a == arm and c == cfg}
             if not v:
                 continue
