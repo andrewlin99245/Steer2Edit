@@ -193,6 +193,9 @@ AIME_FILE=... bash reencode/run_reencode.sh ent_aime_run   # 60 AIME problems at
 
 The checks require threshold -inf to equal `edit` and +inf to equal `edit_re`, in tokens and cache, bitwise.
 
+The AIME run at ρ_mlp 1.00 is in progress: `aime_ent_r1.00/` has the edit, threshold and finished runs, and how to run the
+remaining problems.
+
 One seed, exploratory, Qwen3-4B, ρ_mlp 0.80, α 0.05, on 100 MATH-500 questions:
 
 | Arm | Correct | Mean tokens | Cap hits |
