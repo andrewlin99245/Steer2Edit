@@ -64,6 +64,17 @@ def main():
             print(f"  paired edit_re vs edit n={len(Q)}: acc {sum(A(i)[0] for i in Q)} vs {sum(B(i)[0] for i in Q)}, "
                   f"only {w}/{l} sign p {sign_p(w, l):.3f} | mean len diff {sum(d) / len(d):+.0f} p {flip_p(d):.3f} | "
                   f"geo ratio {math.exp(sum(lr) / len(lr)):.3f} p {flip_p(lr):.3f}")
+        for base in ("edit", "edit_re"):  # edit_ent vs each at the same setting
+            Q = sorted(i for (a, c, i) in G if a == "edit_ent" and c == cfg and (base, cfg, i) in G)
+            if Q:
+                A, B = (lambda i: G[("edit_ent", cfg, i)]), (lambda i, b=base: G[(b, cfg, i)])
+                w = sum(A(i)[0] and not B(i)[0] for i in Q)
+                l = sum(B(i)[0] and not A(i)[0] for i in Q)
+                d = [A(i)[1] - B(i)[1] for i in Q]
+                lr = [math.log(max(A(i)[1], 1) / max(B(i)[1], 1)) for i in Q]
+                print(f"  paired edit_ent vs {base} n={len(Q)}: acc {sum(A(i)[0] for i in Q)} vs {sum(B(i)[0] for i in Q)}, "
+                      f"only {w}/{l} sign p {sign_p(w, l):.3f} | mean len diff {sum(d) / len(d):+.0f} p {flip_p(d):.3f} | "
+                      f"geo ratio {math.exp(sum(lr) / len(lr)):.3f} p {flip_p(lr):.3f}")
 
 
 if __name__ == "__main__":

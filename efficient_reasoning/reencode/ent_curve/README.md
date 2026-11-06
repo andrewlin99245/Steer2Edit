@@ -7,8 +7,10 @@ The packs here are the edits that edit and edit_re used.
 ```bash
 cd efficient_reasoning
 bash reencode/ent_curve/install.sh
+bash reencode/nibi_math100/install.sh                                            # the Nibi runs to compare against
 bash reencode/run_reencode.sh ent_curve_checks                                   # thresholds + checks for the 3 settings, ~40 min
 for i in 0 1 2 3 4 5 6 7; do SHARDS=8 bash reencode/run_reencode.sh ent_curve_run $i; done   # or one job per shard
+bash reencode/run_reencode.sh edit_eval                                           # paired vs edit and edit_re at each ρ
 ```
 
 `math100()` loads `HuggingFaceH4/MATH-500` with `datasets`, so download it on a login node first. Peak memory on MATH-500 was
