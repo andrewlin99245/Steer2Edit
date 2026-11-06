@@ -196,6 +196,8 @@ The checks require threshold -inf to equal `edit` and +inf to equal `edit_re`, i
 The AIME run at ρ_mlp 1.00 is in progress: `aime_ent_r1.00/` has the edit, threshold and finished runs, and how to run the
 remaining problems.
 
+The edit_ent curve on MATH-500 at ρ_mlp 0.65, 0.70 and 0.75: see `ent_curve/`.
+
 One seed, exploratory, Qwen3-4B, ρ_mlp 0.80, α 0.05, on 100 MATH-500 questions:
 
 | Arm | Correct | Mean tokens | Cap hits |

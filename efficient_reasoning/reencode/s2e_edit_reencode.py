@@ -52,6 +52,7 @@ ENT_CFG, ENT_KEEP, ENT_N, ENT_MAX_NEW = "r0.80_a0.05", 0.20, 30, 4096
 ENT = [("edit_ent", ENT_CFG)]
 ENT_AIME_CFG = "r1.00_a0.05"  # edit_ent on AIME, its own tau
 ENT_AIME = [("edit_ent", ENT_AIME_CFG)]
+ENT_CURVE = [("edit_ent", f"r{rm:.2f}_a0.05") for rm in (0.65, 0.7, 0.75)]  # edit_ent curve on MATH-500
 OUT = S.OUT / "edit"
 
 
@@ -354,7 +355,7 @@ def ent_checks(cfg=ENT_CFG):
     S.OUT.mkdir(exist_ok=True)
     (S.OUT / f"checks_s2e_edit_ent{'' if cfg == ENT_CFG else '_' + cfg}.json").write_text(json.dumps({"all_pass": ok, "cfg": cfg, "report": report}, indent=1, default=str))
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
-    raise SystemExit(0 if ok else 1)
+    return ok
 
 
 def aime(path, n):
@@ -422,12 +423,12 @@ def run(cfgs, shard, plan=None, aime_file=None, aime_n=60):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["checks", "run", "packs", "ent-checks"])
-    ap.add_argument("--plan", choices=["curve", "ent", "ent_aime"])
+    ap.add_argument("--plan", choices=["curve", "ent", "ent_aime", "ent_curve"])
     ap.add_argument("--aime", metavar="FILE")
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--cfgs", nargs="+", default=RUN, choices=list(CFGS))
     ap.add_argument("--shard", default="0/1")
-    ap.add_argument("--ent-cfg", default=ENT_CFG, choices=list(CFGS))  # ent-checks: the setting to calibrate and check
+    ap.add_argument("--ent-cfg", nargs="+", default=[ENT_CFG], choices=list(CFGS))  # ent-checks: the setting to calibrate and check
     a = ap.parse_args()
     if a.mode == "packs":  # only their compute_edits, for settings the checks stage did not build
         model = S.load_model()[0]
@@ -436,9 +437,10 @@ def main():
     elif a.mode == "checks":
         checks()
     elif a.mode == "ent-checks":
-        ent_checks(a.ent_cfg)
+        oks = [ent_checks(c) for c in a.ent_cfg]  # each its own tau and checks file
+        raise SystemExit(0 if all(oks) else 1)
     else:
-        run(a.cfgs, a.shard, ENT_AIME if a.plan == "ent_aime" else AIME if a.aime else CURVE if a.plan == "curve" else ENT if a.plan == "ent" else None, a.aime, a.n)
+        run(a.cfgs, a.shard, ENT_CURVE if a.plan == "ent_curve" else ENT_AIME if a.plan == "ent_aime" else AIME if a.aime else CURVE if a.plan == "curve" else ENT if a.plan == "ent" else None, a.aime, a.n)
 
 
 if __name__ == "__main__":
